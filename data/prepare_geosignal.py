@@ -51,7 +51,7 @@ def _save_json(records: list[dict], path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--geosignal-id", default="deng-ai/GeoSignal", help="GeoSignal dataset ID.")
+    parser.add_argument("--geosignal-id", default="daven3/geosignal", help="GeoSignal dataset ID.")
     parser.add_argument("--alpaca-id", default="tatsu-lab/alpaca", help="Replay dataset ID.")
     parser.add_argument("--replay-size", type=int, default=5000, help="Number of Alpaca samples to export.")
     args = parser.parse_args()
@@ -59,7 +59,13 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     processed_dir = ROOT / "data" / "processed"
 
-    geosignal = load_dataset(args.geosignal_id)
+    try:
+        geosignal = load_dataset(args.geosignal_id)
+    except Exception as exc:
+        raise RuntimeError(
+            "Unable to download GeoSignal. Verify the dataset ID and access permissions. "
+            f"Tried: {args.geosignal_id}"
+        ) from exc
     train_split = geosignal["train"] if "train" in geosignal else next(iter(geosignal.values()))
     formatted = train_split.map(_format_example)
     formatted = formatted.remove_columns([col for col in formatted.column_names if col not in {"instruction", "input", "output"}])

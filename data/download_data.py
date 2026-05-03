@@ -7,7 +7,7 @@ Outputs:
 
 Usage:
   python data/download_data.py
-  python data/download_data.py --geobench-id Deng2023/GeoBench --earthse-id ai-earth/EarthSE
+  python data/download_data.py --geobench-id daven3/geobench --earthse-iron-id ai-earth/Earth-Iron --earthse-silver-id ai-earth/Earth-Silver
 """
 
 from __future__ import annotations
@@ -55,34 +55,25 @@ def _download_with_fallback(primary_id: str, fallback_ids: list[str]) -> Dataset
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--geobench-id", default="Deng2023/GeoBench", help="GeoBench dataset ID.")
-    parser.add_argument("--earthse-id", default="ai-earth/EarthSE", help="EarthSE dataset ID.")
+    parser.add_argument("--geobench-id", default="daven3/geobench", help="GeoBench dataset ID.")
+    parser.add_argument("--earthse-iron-id", default="ai-earth/Earth-Iron", help="EarthSE Iron dataset ID.")
+    parser.add_argument("--earthse-silver-id", default="ai-earth/Earth-Silver", help="EarthSE Silver dataset ID.")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     raw_dir = ROOT / "data" / "raw"
 
-    geobench = _download_with_fallback(args.geobench_id, ["Deng2023/GeoBench", "GeoX-Lab/GeoBench"])
-    earthse = _download_with_fallback(args.earthse_id, ["ai-earth/EarthSE"])
-
-    earthse_filtered = DatasetDict()
-    for split, split_dataset in earthse.items():
-        if "subset" in split_dataset.column_names:
-            subset_values = {str(item).lower() for item in split_dataset["subset"]}
-            if {"iron", "silver"} & subset_values:
-                earthse_filtered[split] = split_dataset.filter(
-                    lambda item: str(item.get("subset", "")).lower() in {"iron", "silver"}
-                )
-            else:
-                earthse_filtered[split] = split_dataset
-        else:
-            earthse_filtered[split] = split_dataset
+    geobench = _download_with_fallback(args.geobench_id, ["daven3/geobench", "xp0123/GeoBench"])
+    earthse_iron = _download_with_fallback(args.earthse_iron_id, ["ai-earth/Earth-Iron"])
+    earthse_silver = _download_with_fallback(args.earthse_silver_id, ["ai-earth/Earth-Silver"])
 
     _save_dataset(geobench, raw_dir / "geobench")
-    _save_dataset(earthse_filtered, raw_dir / "earthse")
+    _save_dataset(earthse_iron, raw_dir / "earthse" / "iron")
+    _save_dataset(earthse_silver, raw_dir / "earthse" / "silver")
 
     _log_stats("GeoBench", geobench)
-    _log_stats("EarthSE (Iron + Silver)", earthse_filtered)
+    _log_stats("EarthSE Iron", earthse_iron)
+    _log_stats("EarthSE Silver", earthse_silver)
 
 
 if __name__ == "__main__":
