@@ -19,35 +19,16 @@ from pathlib import Path
 from datasets import Dataset
 from trl import SFTTrainer
 
-from common import (
-    MetricsLoggerCallback,
-    ROOT,
-    apply_lora,
-    build_training_arguments,
-    data_collator,
-    format_chat_example,
-    load_instruction_records,
-    load_model,
-    load_tokenizer,
-    load_yaml,
-    save_training_history,
-)
+from common import MetricsLoggerCallback, ROOT, apply_lora, build_training_arguments, format_chat_example, load_instruction_records, load_model, load_tokenizer, load_yaml, save_training_history
 
 
 def _build_replay_dataset(tokenizer, max_length: int, geosignal_records: list[dict], replay_records: list[dict]) -> Dataset:
+    del tokenizer, max_length
     mixed_records = [{"record": item, "source": "geosignal"} for item in geosignal_records] + [
         {"record": item, "source": "replay"} for item in replay_records
     ]
     dataset = Dataset.from_list(mixed_records).shuffle(seed=42)
-
-    def _tokenize(batch):
-        texts = [format_chat_example(record) for record in batch["record"]]
-        tokens = tokenizer(texts, truncation=True, max_length=max_length, padding=False)
-        tokens["labels"] = [ids.copy() for ids in tokens["input_ids"]]
-        tokens["source"] = batch["source"]
-        return tokens
-
-    return dataset.map(_tokenize, batched=True, remove_columns=["record", "source"])
+    return dataset.map(lambda row: {"text": format_chat_example(row["record"])}, remove_columns=["record", "source"])
 
 
 def main() -> None:
@@ -83,7 +64,7 @@ def main() -> None:
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         args=build_training_arguments(args.output_dir, finetune_cfg, "lora_replay"),
-        data_collator=data_collator(tokenizer),
+        dataset_text_field="text",
         callbacks=[metrics_callback],
         max_seq_length=finetune_cfg["max_seq_length"],
     )

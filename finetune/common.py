@@ -53,16 +53,11 @@ def format_chat_example(record: dict) -> str:
 
 
 def build_datasets(train_path: Path, val_path: Path, tokenizer, max_length: int) -> tuple[Dataset, Dataset]:
-    def _tokenize(batch):
-        texts = [format_chat_example(record) for record in batch["record"]]
-        tokens = tokenizer(texts, truncation=True, max_length=max_length, padding=False)
-        tokens["labels"] = [ids.copy() for ids in tokens["input_ids"]]
-        return tokens
-
+    del tokenizer, max_length
     train_records = load_instruction_records(train_path)
     val_records = load_instruction_records(val_path)
-    train_dataset = Dataset.from_list([{"record": item} for item in train_records]).map(_tokenize, batched=True, remove_columns=["record"])
-    val_dataset = Dataset.from_list([{"record": item} for item in val_records]).map(_tokenize, batched=True, remove_columns=["record"])
+    train_dataset = Dataset.from_list([{"text": format_chat_example(item)} for item in train_records])
+    val_dataset = Dataset.from_list([{"text": format_chat_example(item)} for item in val_records])
     return train_dataset, val_dataset
 
 

@@ -62,7 +62,7 @@ def main() -> None:
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         args=build_training_arguments(args.output_dir, finetune_cfg, "lora_selective"),
-        data_collator=data_collator(tokenizer),
+        dataset_text_field="text",
         callbacks=[metrics_callback],
         max_seq_length=finetune_cfg["max_seq_length"],
     )
