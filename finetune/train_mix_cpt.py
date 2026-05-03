@@ -43,7 +43,7 @@ class LSSDSFTTrainer(SFTTrainer):
         self.teacher_model = teacher_model
         self.lssd_alpha = lssd_alpha
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs["labels"]
         outputs = model(**inputs)
         base_loss = outputs.loss

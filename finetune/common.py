@@ -117,6 +117,8 @@ def load_model(model_id: str, finetune_cfg: dict):
 
 
 def apply_lora(model, strategy_cfg: dict):
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
     lora_config = LoraConfig(
         r=strategy_cfg["r"],
         lora_alpha=strategy_cfg["lora_alpha"],
