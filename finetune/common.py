@@ -75,6 +75,8 @@ def load_tokenizer(model_id: str):
 
 
 def build_quant_config(settings: dict) -> BitsAndBytesConfig:
+    if not settings.get("load_in_4bit", True):
+        raise ValueError("4-bit quantization disabled in configuration.")
     compute_dtype = getattr(torch, settings.get("bnb_4bit_compute_dtype", "float16"))
     return BitsAndBytesConfig(
         load_in_4bit=settings.get("load_in_4bit", True),
@@ -85,15 +87,37 @@ def build_quant_config(settings: dict) -> BitsAndBytesConfig:
 
 
 def load_model(model_id: str, finetune_cfg: dict):
-    quant_config = build_quant_config(finetune_cfg)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        quantization_config=quant_config,
-        device_map="auto",
-        trust_remote_code=True,
-    )
+    quant_config = None
+    use_kbit = finetune_cfg.get("load_in_4bit", True)
+    if use_kbit:
+        try:
+            quant_config = build_quant_config(finetune_cfg)
+        except Exception as exc:
+            LOGGER.warning("Unable to initialize 4-bit quantization config: %s", exc)
+            quant_config = None
+
+    model_kwargs = {
+        "device_map": "auto",
+        "trust_remote_code": True,
+        "low_cpu_mem_usage": True,
+    }
+    if quant_config is not None:
+        model_kwargs["quantization_config"] = quant_config
+    else:
+        model_kwargs["torch_dtype"] = torch.float16 if torch.cuda.is_available() else torch.float32
+
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
+    except Exception as exc:
+        if quant_config is None:
+            raise
+        LOGGER.warning("4-bit model load failed, falling back to non-quantized weights: %s", exc)
+        model_kwargs.pop("quantization_config", None)
+        model_kwargs["torch_dtype"] = torch.float16 if torch.cuda.is_available() else torch.float32
+        model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
     model.config.use_cache = False
-    model = prepare_model_for_kbit_training(model)
+    if quant_config is not None:
+        model = prepare_model_for_kbit_training(model)
     return model
 
 
@@ -142,6 +166,9 @@ def freeze_bottom_layers(model, freeze_pct: float) -> tuple[list[str], list[str]
 
 
 def build_training_arguments(output_dir: str | Path, finetune_cfg: dict, run_name: str) -> TrainingArguments:
+    use_bf16 = torch.cuda.is_available() and torch.cuda.get_device_capability(0)[0] >= 8 if torch.cuda.is_available() else False
+    use_fp16 = not use_bf16 if torch.cuda.is_available() else False
+    optim_name = "paged_adamw_8bit" if finetune_cfg.get("load_in_4bit", True) else "adamw_torch"
     return TrainingArguments(
         output_dir=str(output_dir),
         run_name=run_name,
@@ -160,9 +187,9 @@ def build_training_arguments(output_dir: str | Path, finetune_cfg: dict, run_nam
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         gradient_checkpointing=True,
-        optim="paged_adamw_8bit",
-        bf16=torch.cuda.is_available() and torch.cuda.get_device_capability(0)[0] >= 8 if torch.cuda.is_available() else False,
-        fp16=not (torch.cuda.is_available() and torch.cuda.get_device_capability(0)[0] >= 8) if torch.cuda.is_available() else False,
+        optim=optim_name,
+        bf16=use_bf16,
+        fp16=use_fp16,
         lr_scheduler_type="cosine",
         report_to=[],
     )

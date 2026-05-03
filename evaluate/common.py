@@ -10,6 +10,7 @@ from typing import Any
 
 import pandas as pd
 from datasets import Dataset, DatasetDict, load_dataset
+from peft import AutoPeftModelForCausalLM
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 LOGGER = logging.getLogger(__name__)
@@ -46,10 +47,26 @@ def select_task_subset(dataset: DatasetDict, task_names: set[str]) -> Dataset:
 
 
 def load_model_and_tokenizer(model_path: str):
-    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+    model_path_obj = Path(model_path)
+    adapter_config_path = model_path_obj / "adapter_config.json"
+
+    tokenizer_source = model_path
+    if adapter_config_path.exists():
+        adapter_config = json.loads(adapter_config_path.read_text(encoding="utf-8"))
+        tokenizer_source = adapter_config.get("base_model_name_or_path", model_path)
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto", trust_remote_code=True)
+
+    if adapter_config_path.exists():
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            model_path,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto", trust_remote_code=True)
     model.eval()
     return model, tokenizer
 

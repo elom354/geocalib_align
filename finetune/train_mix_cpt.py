@@ -92,12 +92,21 @@ def main() -> None:
     )
 
     student_model = apply_lora(load_model(args.model_id, finetune_cfg), strategy_cfg)
-    teacher_model = AutoModelForCausalLM.from_pretrained(
-        args.model_id,
-        quantization_config=build_quant_config(finetune_cfg),
-        device_map="auto",
-        trust_remote_code=True,
-    )
+    teacher_kwargs = {
+        "device_map": "auto",
+        "trust_remote_code": True,
+        "low_cpu_mem_usage": True,
+    }
+    if finetune_cfg.get("load_in_4bit", True):
+        try:
+            teacher_kwargs["quantization_config"] = build_quant_config(finetune_cfg)
+        except Exception as exc:
+            logging.warning("Teacher quantization unavailable, falling back to fp16/fp32: %s", exc)
+            teacher_kwargs["torch_dtype"] = torch.float16 if torch.cuda.is_available() else torch.float32
+    else:
+        teacher_kwargs["torch_dtype"] = torch.float16 if torch.cuda.is_available() else torch.float32
+
+    teacher_model = AutoModelForCausalLM.from_pretrained(args.model_id, **teacher_kwargs)
     teacher_model.eval()
     for param in teacher_model.parameters():
         param.requires_grad = False
