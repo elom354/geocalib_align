@@ -109,7 +109,14 @@ def mean_or_zero(series: pd.Series) -> float:
 
 
 def extract_json_object(text: str) -> dict[str, Any]:
+    # Try to find something that looks like JSON objects
     match = re.search(r"\{.*\}", text, flags=re.DOTALL)
     if not match:
-        raise ValueError(f"Model response does not contain JSON: {text}")
-    return json.loads(match.group(0))
+        # Fallback if no {} block found
+        return {"error": f"Model response does not contain JSON: {text}"}
+
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        # Graceful degradation if the JSON is malformed
+        return {"error": f"JSON parse error: {exc}", "raw": match.group(0)}

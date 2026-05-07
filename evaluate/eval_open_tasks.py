@@ -64,8 +64,23 @@ def main() -> None:
         reference = row.get("answer") or row.get("reference_answer") or row.get("label") or ""
         answer = generate_answer(model, tokenizer, build_prompt(question, context), max_new_tokens=300)
         prompt = JUDGE_TEMPLATE.format(question=question, answer=answer)
-        judged = extract_json_object(generate_answer(judge_model, judge_tokenizer, prompt, max_new_tokens=128))
-        judged_samples.append({"question": question, "answer": answer, "reference": reference, **judged})
+        raw_judge_output = generate_answer(judge_model, judge_tokenizer, prompt, max_new_tokens=128)
+        judged = extract_json_object(raw_judge_output)
+
+        # Fallback values if JSON decoding failed
+        prompt_align = judged.get("prompt_alignment", 1)  # Default penalty is 1
+        correctness = judged.get("correctness", 1)
+        relevance = judged.get("answer_relevance", 1)
+
+        judged_samples.append({
+            "question": question,
+            "answer": answer,
+            "reference": reference,
+            "prompt_alignment": prompt_align,
+            "correctness": correctness,
+            "answer_relevance": relevance,
+            "raw_judge_output": raw_judge_output if "error" in judged else None
+        })
         references.append(reference)
         predictions.append(answer)
 
@@ -73,9 +88,9 @@ def main() -> None:
     result = {
         "model": args.model_name,
         "strategy": args.strategy,
-        "prompt_alignment": sum(item["prompt_alignment"] for item in judged_samples) / len(judged_samples),
-        "correctness": sum(item["correctness"] for item in judged_samples) / len(judged_samples),
-        "answer_relevance": sum(item["answer_relevance"] for item in judged_samples) / len(judged_samples),
+        "prompt_alignment": sum(item["prompt_alignment"] for item in judged_samples) / max(1, len(judged_samples)),
+        "correctness": sum(item["correctness"] for item in judged_samples) / max(1, len(judged_samples)),
+        "answer_relevance": sum(item["answer_relevance"] for item in judged_samples) / max(1, len(judged_samples)),
         "bert_precision": float(precision.mean().item()),
         "bert_recall": float(recall.mean().item()),
         "bert_f1": float(f1.mean().item()),

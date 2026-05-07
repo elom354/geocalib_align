@@ -127,7 +127,13 @@ def apply_lora(model, strategy_cfg: dict):
         bias="none",
         task_type="CAUSAL_LM",
     )
-    return get_peft_model(model, lora_config)
+    model = get_peft_model(model, lora_config)
+
+    for param in model.parameters():
+        if param.requires_grad:
+            param.data = param.data.to(torch.float32)
+
+    return model
 
 
 def freeze_bottom_layers(model, freeze_pct: float) -> tuple[list[str], list[str]]:
@@ -154,6 +160,8 @@ def freeze_bottom_layers(model, freeze_pct: float) -> tuple[list[str], list[str]
         requires_grad = idx >= freeze_count
         for param in layer.parameters():
             param.requires_grad = requires_grad
+            if requires_grad and param.dtype != torch.float32:
+                param.data = param.data.to(torch.float32)
         name = f"layer_{idx}"
         if requires_grad:
             trainable.append(name)
